@@ -82,6 +82,21 @@ pip install fastmcp httpx
 claude mcp add libreoffice -- fastmcp run /path/to/libreoffice_mcp_server.py
 ```
 
+### WebAssembly Bridge (Zero-Install / In-Browser)
+
+If you do not have LibreOffice installed on your host system, you can use the WebAssembly bridge powered by **ZetaOffice / LOWA** and **ZetaJS**:
+
+```bash
+cd demos/zetajs-mcp-bridge
+pnpm install
+pnpm start
+```
+
+1. Open `http://localhost:8765` in your browser to launch the sandboxed WebAssembly office worker.
+2. Connect your MCP client (Antigravity, Claude Code, Cursor) via `mcp_stdio_server.mjs`, which exposes the exact same 9 consolidated tools over stdio JSON-RPC.
+
+See [demos/zetajs-mcp-bridge/README.md](demos/zetajs-mcp-bridge/README.md) for architecture and usage details.
+
 ## 🎯 Quick Start
 
 ### Using with Claude Code

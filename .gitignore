@@ -104,3 +104,10 @@ local_config.json
 # MCP specific
 mcp_test_*
 temp_documents/
+
+# Node.js / JavaScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
