@@ -34,6 +34,7 @@ const server = http.createServer(async (req, res) => {
   // Cross-Origin Isolation headers required for SharedArrayBuffer / Wasm pthreads
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -46,12 +47,13 @@ const server = http.createServer(async (req, res) => {
 
   // --- MCP API Endpoints ---
   if (pathname === '/health') {
+    const client = getActiveClient();
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status: 'healthy',
       server: 'ZetaJS Wasm MCP Bridge',
       version: '1.0.0',
-      browser_connected: !!(activeClient && activeClient.readyState === 1),
+      browser_connected: !!client,
       mode: 'webassembly-uno'
     }));
     return;
@@ -96,7 +98,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      if (!activeClient || activeClient.readyState !== 1) {
+      const client = getActiveClient();
+      if (!client) {
         res.writeHead(503, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           error: 'No active ZetaOffice Wasm session connected. Open http://localhost:' + PORT + ' in your browser.',
@@ -116,7 +119,7 @@ const server = http.createServer(async (req, res) => {
       });
 
       // Dispatch to Wasm worker over WebSocket
-      activeClient.send(JSON.stringify({
+      client.send(JSON.stringify({
         type: 'mcp_request',
         id: reqId,
         tool: toolName,
@@ -162,10 +165,19 @@ const server = http.createServer(async (req, res) => {
 
 // Setup WebSocket Server
 const wss = new WebSocketServer({ server, path: '/ws' });
+const connectedClients = new Set();
+
+function getActiveClient() {
+  const arr = Array.from(connectedClients);
+  for (let i = arr.length - 1; i >= 0; i--) {
+    if (arr[i].readyState === 1) return arr[i];
+  }
+  return null;
+}
 
 wss.on('connection', (ws, req) => {
   console.log(`[WebSocket] New browser tab connected from ${req.socket.remoteAddress}`);
-  activeClient = ws;
+  connectedClients.add(ws);
 
   ws.on('message', (message) => {
     try {
@@ -189,9 +201,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     console.log('[WebSocket] Browser tab disconnected');
-    if (activeClient === ws) {
-      activeClient = null;
-    }
+    connectedClients.delete(ws);
   });
 });
 

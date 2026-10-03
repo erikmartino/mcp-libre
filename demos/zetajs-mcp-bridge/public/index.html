@@ -310,8 +310,9 @@
           ws.send(JSON.stringify({ type: 'ready', info: 'ZetaOffice Wasm Ready' }));
         }
 
-        // Listen for replies from office_thread.js
-        zHM.thrPort.addEventListener('message', (event) => {
+        // Listen for replies from office_worker.js
+        const oldOnMessage = zHM.thrPort.onmessage;
+        zHM.thrPort.onmessage = (event) => {
           const data = event.data;
           if (data && data.cmd === 'mcp_reply') {
             log('UNO', 'uno', `UNO tool execution finished (ID: ${data.id})`);
@@ -322,10 +323,15 @@
                 result: data.result
               }));
             }
+            return;
           } else if (data && data.cmd === 'mcp_ready') {
             log('UNO', 'uno', data.info);
+            return;
           }
-        });
+          if (oldOnMessage) {
+            try { oldOnMessage(event); } catch (e) { /* ignore other commands */ }
+          }
+        };
       });
     } catch (err) {
       console.error('Failed to initialize ZetaJS:', err);

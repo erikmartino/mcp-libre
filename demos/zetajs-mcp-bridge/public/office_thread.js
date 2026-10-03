@@ -26,7 +26,7 @@ function initDefaultDocument() {
     currentDocTitle = 'Untitled Writer Document';
 
     // Insert welcome greeting
-    const doc = css.text.XTextDocument.query(xModel);
+    const doc = xModel;
     if (doc) {
       const text = doc.getText();
       const cursor = text.createTextCursor();
@@ -45,22 +45,29 @@ function initDefaultDocument() {
   }
 }
 
+initDefaultDocument();
+
 // Helper to get paragraphs as an array of strings
 function getParagraphList(doc) {
   const list = [];
-  const text = doc.getText();
-  const enumAccess = css.container.XEnumerationAccess.query(text);
-  if (enumAccess) {
-    const enumeration = enumAccess.createEnumeration();
-    while (enumeration.hasMoreElements()) {
-      const p = css.text.XTextRange.query(enumeration.nextElement().get());
-      if (p) list.push(p.getString());
+  try {
+    if (doc && typeof doc.getText === 'function') {
+      const text = doc.getText();
+      const str = text.getString();
+      if (str) {
+        return str.split('\n');
+      }
     }
+  } catch (e) {
+    console.warn('[ZetaJS Worker] Error reading paragraphs:', e);
   }
   return list;
 }
 
 // Listen for MCP commands dispatched from the main browser thread
+if (typeof zHT.thrPort.start === 'function') {
+  zHT.thrPort.start();
+}
 zHT.thrPort.onmessage = (event) => {
   const data = event.data;
   if (!data || data.cmd !== 'mcp_exec') return;
@@ -89,7 +96,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'get_document_info_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const textObj = doc ? doc.getText() : null;
         const str = textObj ? textObj.getString() : '';
         result = {
@@ -119,7 +126,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'get_text_content_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         if (!doc) throw new Error('Active document is not a text document');
         const textObj = doc.getText();
         const fullContent = textObj.getString();
@@ -145,7 +152,7 @@ zHT.thrPort.onmessage = (event) => {
       // --- 2. Text Manipulation ---
       case 'insert_text_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         if (!doc) throw new Error('Active document is not a text document');
 
         const textObj = doc.getText();
@@ -159,13 +166,13 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'format_text_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         if (!doc) throw new Error('Active document is not a text document');
 
         const textObj = doc.getText();
         const cursor = textObj.createTextCursor();
         cursor.gotoEnd(false);
-        const props = css.beans.XPropertySet.query(cursor);
+        const props = cursor;
         const formatting = params.formatting || params;
 
         if (formatting.bold !== undefined) {
@@ -194,13 +201,13 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'format_paragraph_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         if (!doc) throw new Error('Active document is not a text document');
 
         const textObj = doc.getText();
         const cursor = textObj.createTextCursor();
         cursor.gotoEnd(false);
-        const props = css.beans.XPropertySet.query(cursor);
+        const props = cursor;
         if (params.style_name) {
           const styleAny = new Module.uno_Any(Module.uno_Type.String(), params.style_name);
           props.setPropertyValue('ParaStyleName', styleAny);
@@ -213,7 +220,7 @@ zHT.thrPort.onmessage = (event) => {
       // --- 3. Structure & Paragraphs ---
       case 'get_paragraph_count_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const paras = getParagraphList(doc);
         result = { success: true, count: paras.length };
         break;
@@ -221,7 +228,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'get_paragraph_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const paras = getParagraphList(doc);
         const idx = (params.n || 1) - 1;
         if (idx < 0 || idx >= paras.length) {
@@ -233,7 +240,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'get_paragraphs_range_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const paras = getParagraphList(doc);
         const start = Math.max(0, (params.start || 1) - 1);
         const end = Math.min(paras.length, params.end || paras.length);
@@ -243,7 +250,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'get_document_outline_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const paras = getParagraphList(doc);
         const headings = paras
           .map((text, i) => ({ text, n: i + 1, level: text.startsWith('#') ? 1 : 2 }))
@@ -270,7 +277,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'get_context_around_cursor_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const textObj = doc.getText();
         const fullContent = textObj.getString();
         result = { success: true, context: fullContent.substring(0, params.chars || 100) };
@@ -291,7 +298,7 @@ zHT.thrPort.onmessage = (event) => {
 
       case 'replace_selection_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const textObj = doc.getText();
         const cursor = textObj.createTextCursor();
         cursor.gotoEnd(false);
@@ -303,7 +310,7 @@ zHT.thrPort.onmessage = (event) => {
       // --- 6. Search & Replace ---
       case 'find_text_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const textObj = doc.getText();
         const full = textObj.getString();
         const matches = [];
@@ -319,7 +326,7 @@ zHT.thrPort.onmessage = (event) => {
       case 'find_and_replace_live':
       case 'find_and_replace_all_live': {
         if (!xModel) throw new Error('No active document available');
-        const doc = css.text.XTextDocument.query(xModel);
+        const doc = xModel;
         const textObj = doc.getText();
         let full = textObj.getString();
         const oldStr = params.old || '';
