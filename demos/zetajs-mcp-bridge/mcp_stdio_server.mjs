@@ -9,8 +9,97 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawn } from "node:child_process";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const LIBREOFFICE_URL = process.env.LIBREOFFICE_URL || "http://localhost:8765";
+
+let bridgeProcess = null;
+
+async function checkHealth(url) {
+  try {
+    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1000) });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.status === 'healthy';
+  } catch {
+    return false;
+  }
+}
+
+async function isWasmReady(url) {
+  try {
+    const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(1000) });
+    if (!res.ok) return false;
+    const data = await res.json();
+    return data.browser_connected === true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureBridge() {
+  const isHealthy = await checkHealth(LIBREOFFICE_URL);
+  if (isHealthy) {
+    return;
+  }
+
+  // Only auto-spawn if running against localhost
+  if (!LIBREOFFICE_URL.includes("localhost") && !LIBREOFFICE_URL.includes("127.0.0.1")) {
+    return;
+  }
+
+  console.error(`[MCP] LibreOffice bridge not running at ${LIBREOFFICE_URL}. Auto-spawning Wasm bridge...`);
+
+  const serverScript = path.join(__dirname, 'server.mjs');
+  const isHeadless = process.env.HEADLESS !== 'false' && process.env.HEADLESS !== '0';
+  const args = [serverScript];
+  if (isHeadless) {
+    args.push('--headless');
+  } else {
+    args.push('--browser');
+  }
+
+  bridgeProcess = spawn(process.execPath, args, {
+    stdio: ['ignore', 'pipe', 'inherit'],
+    env: { ...process.env }
+  });
+
+  if (bridgeProcess.stdout) {
+    bridgeProcess.stdout.on('data', (d) => {
+      // Forward bridge logs to stderr so stdout remains pure JSON-RPC
+      process.stderr.write(d);
+    });
+  }
+
+  // Wait for server to become healthy and Wasm runner to connect (up to 15s)
+  const startTime = Date.now();
+  while (Date.now() - startTime < 15000) {
+    await new Promise(r => setTimeout(r, 500));
+    if (await isWasmReady(LIBREOFFICE_URL)) {
+      console.error(`[MCP] LibreOffice Wasm bridge is ready and connected!`);
+      return;
+    }
+  }
+  console.error(`[MCP] Warning: Bridge started, but Wasm runner not yet confirmed connected.`);
+}
+
+function cleanupBridge() {
+  if (bridgeProcess) {
+    try {
+      bridgeProcess.kill('SIGTERM');
+    } catch {}
+    bridgeProcess = null;
+  }
+}
+
+process.on('exit', cleanupBridge);
+process.on('SIGINT', () => { cleanupBridge(); process.exit(0); });
+process.on('SIGTERM', () => { cleanupBridge(); process.exit(0); });
 
 const server = new McpServer({
   name: "libreoffice-wasm",
@@ -19,6 +108,7 @@ const server = new McpServer({
 
 // Helper function to call the ZetaJS Wasm HTTP bridge
 async function callLibreoffice(endpoint, method = "POST", data = {}) {
+  await ensureBridge();
   try {
     const options = {
       method,
@@ -31,7 +121,7 @@ async function callLibreoffice(endpoint, method = "POST", data = {}) {
     return await res.json();
   } catch (err) {
     return {
-      error: `Cannot connect to LibreOffice Wasm bridge at ${LIBREOFFICE_URL}. Ensure http://localhost:8765 is open in your browser. Error: ${err.message}`
+      error: `Cannot connect to LibreOffice Wasm bridge at ${LIBREOFFICE_URL}. Error: ${err.message}`
     };
   }
 }
@@ -49,12 +139,13 @@ function jsonResponse(data) {
 // =============================================================================
 server.tool(
   "document",
-  "Manage LibreOffice documents - create, get info, list, content, status, paragraph styles (list, create, edit, delete).",
+  "Manage LibreOffice documents - create, get info, list, content, status, open in browser, paragraph styles (list, create, edit, delete).",
   {
     action: z.enum([
       "create", "info", "list", "content", "status",
-      "styles", "create_style", "edit_style", "delete_style", "style_properties"
-    ]).describe("The operation to perform"),
+      "styles", "create_style", "edit_style", "delete_style", "style_properties",
+      "open_browser"
+    ]).describe("The operation to perform (use 'open_browser' to view the live document in your desktop browser)"),
     doc_type: z.enum(["writer", "calc", "impress", "draw"]).default("writer").describe("Document type for create action"),
     style_name: z.string().optional().describe("Style name for create_style / edit_style / delete_style actions"),
     parent_style: z.string().optional().describe("Parent style for create_style / edit_style (default: Standard)"),
@@ -76,6 +167,8 @@ server.tool(
       return jsonResponse(await callLibreoffice("/tools/get_text_content_live", "POST", {}));
     } else if (action === "status") {
       return jsonResponse(await callLibreoffice("/health", "GET"));
+    } else if (action === "open_browser") {
+      return jsonResponse(await callLibreoffice("/tools/open_browser_live", "POST", {}));
     } else if (action === "styles") {
       return jsonResponse(await callLibreoffice("/tools/list_paragraph_styles_live", "POST", {}));
     } else if (action === "create_style") {
