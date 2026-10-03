@@ -26,34 +26,13 @@ rm -f "$BUILD_DIR/${EXTENSION_NAME}.oxt"
 echo "📦 Packaging extension files..."
 
 # Create the .oxt file (which is just a ZIP archive)
-if command -v zip >/dev/null 2>&1; then
-    zip -r "$BUILD_DIR/${EXTENSION_NAME}-${VERSION}.oxt" \
-        META-INF/ \
-        pythonpath/ \
-        *.xml \
-        *.xcu \
-        *.txt \
-        -x "*.pyc" "*/__pycache__/*"
-else
-    echo "ℹ️  'zip' command not found, using python3 zipfile..."
-    python3 -c "
-import os, zipfile
-plugin_dir = os.getcwd()
-oxt_path = os.path.join('$BUILD_DIR', '${EXTENSION_NAME}-${VERSION}.oxt')
-with zipfile.ZipFile(oxt_path, 'w', zipfile.ZIP_DEFLATED) as z:
-    for root, dirs, files in os.walk(plugin_dir):
-        dirs[:] = [d for d in dirs if d != '__pycache__']
-        for file in files:
-            if file.endswith('.pyc'):
-                continue
-            rel_dir = os.path.relpath(root, plugin_dir)
-            rel_path = os.path.normpath(os.path.join(rel_dir, file))
-            if (rel_path.startswith('META-INF/') or 
-                rel_path.startswith('pythonpath/') or
-                (rel_dir == '.' and (file.endswith('.xml') or file.endswith('.xcu') or file.endswith('.txt')))):
-                z.write(os.path.join(root, file), rel_path)
-"
-fi
+zip -r "$BUILD_DIR/${EXTENSION_NAME}-${VERSION}.oxt" \
+    META-INF/ \
+    pythonpath/ \
+    *.xml \
+    *.xcu \
+    *.txt \
+    -x "*.pyc" "*/__pycache__/*"
 
 # Create a symlink for easier access (or copy if symlinks not supported)
 ln -sf "${EXTENSION_NAME}-${VERSION}.oxt" "$BUILD_DIR/${EXTENSION_NAME}.oxt" 2>/dev/null || \
