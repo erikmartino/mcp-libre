@@ -80,7 +80,7 @@ curl -X POST http://localhost:8765/tools/get_text_content_live \
   -d '{}'
 ```
 
-### Option 3: Connect Antigravity (or Claude Code via Stdio)
+### Option 3: Connect AI Assistants via MCP Stdio
 The server [`mcp_stdio_server.mjs`](mcp_stdio_server.mjs) exposes the **exact 9 consolidated tools** matching `libreoffice_mcp_server.py`:
 1. `document`: create, info, list, content, status, styles, create_style, edit_style, delete_style, style_properties
 2. `structure`: outline, paragraph, range, count
@@ -92,14 +92,38 @@ The server [`mcp_stdio_server.mjs`](mcp_stdio_server.mjs) exposes the **exact 9 
 8. `save`: save, export
 9. `text`: insert, format, style
 
-It is already configured in Antigravity (`~/.gemini/config/mcp_config.json`):
+#### A. Claude Code CLI
+Add the server directly from the command line:
+```bash
+claude mcp add libreoffice-wasm -e LIBREOFFICE_URL=http://localhost:8765 -- node $(pwd)/mcp_stdio_server.mjs
+```
+*(Or use the `/mcp` command inside Claude Code to interactively add the server).*
+
+#### B. Antigravity / Gemini CLI
+Add via the `/mcp` slash command in chat or configure in `~/.gemini/config/mcp_config.json`:
 ```json
 {
   "mcpServers": {
     "libreoffice-wasm": {
       "command": "node",
-      "args": ["path/to/mcp-libre/demos/zetajs-mcp-bridge/mcp_stdio_server.mjs"],
+      "args": ["/absolute/path/to/mcp-libre/demos/zetajs-mcp-bridge/mcp_stdio_server.mjs"],
       "env": { "LIBREOFFICE_URL": "http://localhost:8765" }
+    }
+  }
+}
+```
+
+#### C. Cursor / Claude Desktop / Other MCP Clients
+Add to your client's MCP configuration settings (`cursor_settings.json` or `claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "libreoffice-wasm": {
+      "command": "node",
+      "args": ["/absolute/path/to/mcp-libre/demos/zetajs-mcp-bridge/mcp_stdio_server.mjs"],
+      "env": {
+        "LIBREOFFICE_URL": "http://localhost:8765"
+      }
     }
   }
 }
