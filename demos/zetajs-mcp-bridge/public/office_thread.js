@@ -97,14 +97,22 @@ zHT.thrPort.onmessage = (event) => {
       case 'get_document_info_live': {
         if (!xModel) throw new Error('No active document available');
         const doc = xModel;
-        const textObj = doc ? doc.getText() : null;
+        const textObj = doc && typeof doc.getText === 'function' ? doc.getText() : null;
         const str = textObj ? textObj.getString() : '';
+        let pageCount = 1;
+        try {
+          const controller = doc.getCurrentController();
+          if (controller && typeof controller.getPageCount === 'function') {
+            pageCount = controller.getPageCount();
+          }
+        } catch {}
         result = {
           success: true,
           title: currentDocTitle,
           type: currentDocType,
           character_count: str.length,
           word_count: str.trim().split(/\s+/).filter(Boolean).length,
+          page_count: pageCount,
           track_changes: {
             recording: isTrackChangesEnabled,
             showing: isTrackChangesEnabled,
@@ -158,9 +166,41 @@ zHT.thrPort.onmessage = (event) => {
         const textObj = doc.getText();
         const cursor = textObj.createTextCursor();
         cursor.gotoEnd(false);
+
+        if (params.page_break) {
+          try {
+            const breakAny = new Module.uno_Any(Module.uno_Type.Enum('com.sun.star.style.BreakType'), 4); // PAGE_BEFORE
+            cursor.setPropertyValue('BreakType', breakAny);
+            breakAny.delete();
+          } catch (e) {
+            console.warn('[ZetaJS Worker] BreakType failed:', e);
+          }
+        }
+
         const textToInsert = params.text || '';
         textObj.insertString(cursor, textToInsert, false);
         result = { success: true, message: `Inserted ${textToInsert.length} characters via ZetaJS UNO` };
+        break;
+      }
+
+      case 'insert_page_break_live': {
+        if (!xModel) throw new Error('No active document available');
+        const doc = xModel;
+        if (!doc) throw new Error('Active document is not a text document');
+
+        const textObj = doc.getText();
+        const cursor = textObj.createTextCursor();
+        cursor.gotoEnd(false);
+        try {
+          const breakAny = new Module.uno_Any(Module.uno_Type.Enum('com.sun.star.style.BreakType'), 4);
+          cursor.setPropertyValue('BreakType', breakAny);
+          breakAny.delete();
+          textObj.insertString(cursor, "\n", false);
+          result = { success: true, message: 'Inserted page break via ZetaJS UNO' };
+        } catch (e) {
+          textObj.insertString(cursor, "\n\n", false);
+          result = { success: true, message: 'Inserted break via ZetaJS UNO' };
+        }
         break;
       }
 

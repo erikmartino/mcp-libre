@@ -416,7 +416,7 @@ server.tool(
   "text",
   "Insert, format text, or apply paragraph styles in the document.",
   {
-    action: z.enum(["insert", "format", "style"]).describe("The operation to perform"),
+    action: z.enum(["insert", "format", "style", "page_break"]).describe("The operation to perform"),
     content: z.string().optional().describe("Text to insert for 'insert' action"),
     bold: z.boolean().optional().describe("Set bold formatting (true/false) for 'format' action"),
     italic: z.boolean().optional().describe("Set italic formatting (true/false) for 'format' action"),
@@ -424,12 +424,15 @@ server.tool(
     font_size: z.number().optional().describe("Font size in points for 'format' action"),
     font_name: z.string().optional().describe("Font family name for 'format' action"),
     style_name: z.string().optional().describe("Name of paragraph style for 'style' action (e.g. 'Heading 1', 'Heading 2', 'Title')"),
-    paragraph_n: z.number().int().optional().describe("Optional paragraph number (1-indexed) to target with 'style' action directly")
+    paragraph_n: z.number().int().optional().describe("Optional paragraph number (1-indexed) to target with 'style' action directly"),
+    page_break: z.boolean().optional().describe("Insert a page break before text (default: false)")
   },
-  async ({ action, content, bold, italic, underline, font_size, font_name, style_name, paragraph_n }) => {
+  async ({ action, content, bold, italic, underline, font_size, font_name, style_name, paragraph_n, page_break }) => {
     if (action === "insert") {
       if (content === undefined) return jsonResponse({ error: "Action 'insert' requires parameter 'content' (text to insert)" });
-      return jsonResponse(await callLibreoffice("/tools/insert_text_live", "POST", { text: content }));
+      return jsonResponse(await callLibreoffice("/tools/insert_text_live", "POST", { text: content, page_break }));
+    } else if (action === "page_break") {
+      return jsonResponse(await callLibreoffice("/tools/insert_page_break_live", "POST", {}));
     } else if (action === "format") {
       const formatting = {};
       if (bold !== undefined) formatting.bold = bold;
